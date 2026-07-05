@@ -1,6 +1,6 @@
 package com.library.model;
 
-import com.library.service.policy.PriorityStudentFinePolicy; // ĐÃ SỬA: Import chính xác chiến lược phạt riêng của SV ưu tiên
+import com.library.service.policy.PriorityStudentFinePolicy; // Import chính xác chiến lược phạt riêng của SV ưu tiên
 
 /**
  * Lớp thực thể đại diện cho loại bạn đọc là Sinh viên ưu tiên, kế thừa từ lớp Reader.
@@ -16,8 +16,15 @@ public class PriorityStudentReader extends Reader {
     private static final String READER_TYPE      = "Sinh viên ưu tiên";
 
     /**
+     * [BỔ SUNG CHO GIAI ĐOẠN 2]: Constructor mặc định không tham số phục vụ giải tuần tự hóa JSON (Jackson)
+     */
+    public PriorityStudentReader() {
+        super("TEMP_ID", "TEMP_NAME", "TEMP_PHONE", new PriorityStudentFinePolicy()); // Thay "" bằng "TEMP_..."
+    }
+
+    /**
      * Constructor khởi tạo tài khoản bạn đọc cho Sinh viên ưu tiên.
-     * ĐÃ SỬA: Tiêm (Inject) chính xác đối tượng chiến lược PriorityStudentFinePolicy vào lớp cha.
+     * Tiêm (Inject) chính xác đối tượng chiến lược PriorityStudentFinePolicy vào lớp cha.
      *
      * @param userId      Mã độc giả sinh viên ưu tiên (Định dạng chuẩn: BDxxx)
      * @param fullName    Họ và tên sinh viên
@@ -52,8 +59,7 @@ public class PriorityStudentReader extends Reader {
     }
 
     /**
-     * Lấy định mức số tiền phạt quá hạn cơ sở mỗi ngày để phục vụ hiển thị tra cứu.
-     * @return 3000
+     * Lấy định mức số tiền phạt quá hạn cơ sở mỗi ngày.
      */
     @Override
     public int getFinePerDay() {

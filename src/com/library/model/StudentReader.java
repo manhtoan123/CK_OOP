@@ -1,6 +1,7 @@
 package com.library.model;
 
 import com.library.service.policy.NormalStudentFinePolicy; // Import chính xác chiến lược tính phạt của Sinh viên thường
+
 /**
  * Lớp thực thể đại diện cho đối tượng độc giả là Sinh viên thường.
  * Kế thừa từ lớp Reader và áp dụng các cấu hình quy định đặc thù:
@@ -13,6 +14,13 @@ public class StudentReader extends Reader {
     private static final int    MAX_BORROW_LIMIT = 3;
     private static final int    FINE_PER_DAY     = 5000;   // 5.000 VND / ngày trễ
     private static final String READER_TYPE      = "Sinh viên thường";
+
+    /**
+     * [BỔ SUNG CHO GIAI ĐOẠN 2]: Constructor mặc định không tham số phục vụ giải tuần tự hóa JSON (Jackson)
+     */
+    public StudentReader() {
+        super("TEMP_ID", "TEMP_NAME", "TEMP_PHONE", new NormalStudentFinePolicy());
+    }
 
     /**
      * Constructor khởi tạo tài khoản bạn đọc cho Sinh viên thường.
@@ -52,8 +60,6 @@ public class StudentReader extends Reader {
 
     /**
      * Lấy định mức số tiền phạt quá hạn cơ sở mỗi ngày.
-     * Phục vụ cho mục đích hiển thị tra cứu nhanh trên giao diện.
-     * @return 5000
      */
     @Override
     public int getFinePerDay() {

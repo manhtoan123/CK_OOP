@@ -1,0 +1,103 @@
+[ {
+  "ticketId" : "PT001",
+  "readerId" : "BD001",
+  "borrowDate" : [ 2026, 6, 1 ],
+  "dueDate" : [ 2026, 6, 15 ],
+  "returnDate" : [ 2026, 6, 15 ],
+  "status" : "RETURNED",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B001",
+    "quantity" : 2
+  } ]
+}, {
+  "ticketId" : "PT002",
+  "readerId" : "BD003",
+  "borrowDate" : [ 2026, 5, 10 ],
+  "dueDate" : [ 2026, 5, 24 ],
+  "returnDate" : [ 2026, 5, 26 ],
+  "status" : "RETURNED",
+  "finePaid" : 4000,
+  "details" : [ {
+    "bookId" : "B005",
+    "quantity" : 1
+  } ]
+}, {
+  "ticketId" : "PT003",
+  "readerId" : "BD002",
+  "borrowDate" : [ 2026, 5, 15 ],
+  "dueDate" : [ 2026, 5, 29 ],
+  "returnDate" : [ 2026, 5, 28 ],
+  "status" : "RETURNED",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B002",
+    "quantity" : 1
+  }, {
+    "bookId" : "B003",
+    "quantity" : 2
+  } ]
+}, {
+  "ticketId" : "PT004",
+  "readerId" : "BD004",
+  "borrowDate" : [ 2026, 6, 5 ],
+  "dueDate" : [ 2026, 6, 19 ],
+  "returnDate" : [ 2026, 7, 5 ],
+  "status" : "RETURNED",
+  "finePaid" : 48000,
+  "details" : [ {
+    "bookId" : "B001",
+    "quantity" : 1
+  }, {
+    "bookId" : "B004",
+    "quantity" : 1
+  } ]
+}, {
+  "ticketId" : "PT005",
+  "readerId" : "BD003",
+  "borrowDate" : [ 2026, 4, 1 ],
+  "dueDate" : [ 2026, 5, 1 ],
+  "returnDate" : [ 2026, 5, 1 ],
+  "status" : "RETURNED",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B002",
+    "quantity" : 3
+  } ]
+}, {
+  "ticketId" : "PT006",
+  "readerId" : "BD006",
+  "borrowDate" : [ 2026, 7, 5 ],
+  "dueDate" : [ 2026, 7, 19 ],
+  "returnDate" : [ 2026, 7, 5 ],
+  "status" : "RETURNED",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B006",
+    "quantity" : 3
+  } ]
+}, {
+  "ticketId" : "PT007",
+  "readerId" : "BD004",
+  "borrowDate" : [ 2026, 7, 5 ],
+  "dueDate" : [ 2026, 7, 19 ],
+  "returnDate" : [ 2026, 7, 5 ],
+  "status" : "RETURNED",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B008",
+    "quantity" : 5
+  } ]
+}, {
+  "ticketId" : "PT008",
+  "readerId" : "BD004",
+  "borrowDate" : [ 2026, 7, 5 ],
+  "dueDate" : [ 2026, 7, 19 ],
+  "returnDate" : null,
+  "status" : "BORROWING",
+  "finePaid" : 0,
+  "details" : [ {
+    "bookId" : "B006",
+    "quantity" : 3
+  } ]
+} ]

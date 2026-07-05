@@ -1,215 +1,91 @@
 package com.library.repository;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.library.model.Reader;
 import org.springframework.stereotype.Repository;
 
-import com.library.model.Reader;
-import com.library.model.StudentReader;
-import com.library.model.PriorityStudentReader;
-import com.library.model.LecturerReader;
-
-import java.io.*;
-import java.util.ArrayList;
+import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Repository
-
-/**
- * Tầng quản lý lưu trữ dữ liệu Độc giả (Bạn đọc) - Đọc ghi file văn bản 'data/readers.txt'
- * ĐÃ CẬP NHẬT: Tích hợp thêm hàm add() và update() để sửa dứt điểm lỗi báo đỏ ở tầng Service.
- */
 public class ReaderRepository {
-    private static final String FILE_PATH = "data/readers.txt";
-    private final List<Reader> readers = new ArrayList<>();
+    private static final String FILE_PATH = "data/readers.json";
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final List<Reader> readers = new CopyOnWriteArrayList<>();
 
-    /**
-     * Khởi tạo tầng lưu trữ độc giả và tự động tải dữ liệu từ file văn bản lên bộ nhớ RAM.
-     */
     public ReaderRepository() {
         loadFromFile();
     }
 
-    /**
-     * Lấy danh sách toàn bộ độc giả hiện có trên bộ nhớ RAM dưới dạng chỉ đọc.
-     * Áp dụng tính năng Defensive Copy bảo vệ cấu trúc mảng hệ thống.
-     *
-     * @return Danh sách Độc giả không thể sửa đổi cấu trúc từ bên ngoài.
-     */
     public List<Reader> getAll() {
-        // THÊM ĐOẠN NÀY ĐỂ DEBUG
-        System.out.println("DEBUG: Repository đang có " + readers.size() + " độc giả.");
-
-        // Nếu size bằng 0, nghĩa là file text của bạn chưa được đọc đúng
-        if (readers.isEmpty()) {
-            System.out.println("CẢNH BÁO: Danh sách độc giả đang rỗng! Kiểm tra lại file đọc dữ liệu.");
-        }
-
-        return new ArrayList<>(readers);
-    }
-
-    /**
-     * Tìm kiếm thông tin một độc giả cụ thể dựa trên Mã bạn đọc (Không phân biệt chữ hoa/thường).
-     *
-     * @param readerId Mã độc giả cần tìm kiếm (Ví dụ: BD001)
-     * @return Đối tượng Reader con tương ứng nếu tìm thấy, ngược lại trả về null
-     */
-
-    /**
-     * Xóa độc giả khỏi danh sách và cập nhật lại file dữ liệu cứng.
-     */
-    public void delete(String id) {
-        // 1. Tìm và xóa độc giả khỏi list trong RAM
-        boolean removed = readers.removeIf(r -> r.getUserId().equals(id.trim()));
-
-        // 2. Nếu tìm thấy và xóa thành công, lưu lại file để đồng bộ
-        if (removed) {
-            saveToFile();
-            System.out.println("[ReaderRepository] Đã xóa độc giả: " + id);
-        } else {
-            throw new IllegalArgumentException("Không tìm thấy độc giả có mã: " + id);
-        }
+        return Collections.unmodifiableList(readers);
     }
 
     public Reader findById(String readerId) {
         if (readerId == null) return null;
-        String trimmedId = readerId.trim();
-        for (Reader r : readers) {
-            if (r.getUserId().equalsIgnoreCase(trimmedId)) {
-                return r;
-            }
-        }
-        return null;
+        return readers.stream()
+                .filter(r -> r.getUserId().equalsIgnoreCase(readerId.trim()))
+                .findFirst()
+                .orElse(null);
     }
 
-    /**
-     * 🌟 THÊM MỚI: Đăng ký thêm một độc giả mới vào bộ nhớ RAM và tự động đồng bộ xuống file text.
-     * Phương thức này giải quyết lỗi báo đỏ hàm .add() trong ReaderService.
-     *
-     * @param reader Đối tượng độc giả mới cần thêm vào hệ thống
-     */
-    public void add(Reader reader) {
+    public synchronized void add(Reader reader) {
         if (reader != null) {
             readers.add(reader);
-            saveToFile(); // Tự động ghi cập nhật lại file text data/readers.txt ngay lập tức
+            saveToFile();
         }
     }
 
-    /**
-     * 🌟 THÊM MỚI: Cập nhật thông tin chỉnh sửa của độc giả trên RAM và tự động lưu file text cứng.
-     * Phương thức này giải quyết lỗi báo đỏ hàm .update() trong ReaderService.
-     *
-     * @param updatedReader Đối tượng độc giả mang thông tin mới cần cập nhật
-     */
-    public void update(Reader updatedReader) {
+    public synchronized void update(Reader updatedReader) {
         if (updatedReader == null) return;
         for (int i = 0; i < readers.size(); i++) {
             if (readers.get(i).getUserId().equalsIgnoreCase(updatedReader.getUserId())) {
                 readers.set(i, updatedReader);
-                saveToFile(); // Tự động ghi đè dữ liệu mới xuống file text cứng
-                return;
+                break;
             }
         }
+        saveToFile();
     }
 
     /**
-     * Đọc dữ liệu từ file text 'data/readers.txt' và nạp vào danh sách quản lý trên RAM.
+     * HÀM XÓA ĐỘC GIẢ KHỎI KHO DỮ LIỆU JSON (BỔ SUNG CHO FRONTEND CRUD)
+     * Tự động giải phóng khỏi danh sách RAM và cập nhật đồng bộ xuống file data/readers.json
      */
-    private void loadFromFile() {
-        readers.clear();
-        File file = new File(FILE_PATH);
+    public synchronized void delete(String id) {
+        if (id == null) return;
 
-        // Nếu file dữ liệu chưa tồn tại, tự động sinh bộ dữ liệu mẫu chuẩn cho lần đầu khởi chạy
-        if (!file.exists()) {
-            initMockData();
-            return;
-        }
+        // 1. Xóa độc giả có mã trùng khớp khỏi danh sách định danh trên RAM
+        readers.removeIf(r -> r.getUserId().equalsIgnoreCase(id.trim()));
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                // Bỏ qua dòng trống hoặc dòng ghi chú có tiền tố bắt đầu bằng dấu #
-                if (line.isEmpty() || line.startsWith("#")) continue;
-
-                Reader r = parseLine(line);
-                if (r != null) {
-                    readers.add(r);
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("[ReaderRepository] Lỗi nghiêm trọng xảy ra khi đọc file bạn đọc: " + e.getMessage());
-        }
+        // 2. Ghi đè cập nhật lại danh sách mới sạch sẽ xuống file cứng readers.json
+        saveToFile();
     }
 
-    /**
-     * Phân tích một dòng text từ file và khởi tạo chính xác đối tượng lớp con của Reader thông qua tính đa hình.
-     */
-    private Reader parseLine(String line) {
+    private synchronized void saveToFile() {
         try {
-            String[] p = line.split("\\|");
-            if (p.length < 4) return null;
-
-            String id = p[0].trim();
-            String name = p[1].trim();
-            String phone = p[2].trim();
-            String type = p[3].trim().toUpperCase(); // CẢI TIẾN: Chuyển sang viết hoa để chống lỗi lệch ký tự
-
-            switch (type) {
-                case "STUDENT":
-                    return new StudentReader(id, name, phone);
-                case "PRIORITY_STUDENT":
-                    return new PriorityStudentReader(id, name, phone);
-                case "LECTURER":
-                    return new LecturerReader(id, name, phone);
-                default:
-                    System.err.println("[ReaderRepository] Không nhận diện được phân loại bạn đọc: " + type);
-                    return null;
+            File file = new File(FILE_PATH);
+            if (file.getParentFile() != null) {
+                file.getParentFile().mkdirs();
             }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * Ghi đè toàn bộ danh sách độc giả từ bộ nhớ RAM xuống file văn bản 'data/readers.txt'.
-     */
-    private void saveToFile() {
-        File file = new File(FILE_PATH);
-        if (file.getParentFile() != null) {
-            file.getParentFile().mkdirs();
-        }
-
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-            // Ghi dòng tiêu đề cấu trúc hướng dẫn cho file văn bản độc giả
-            bw.write("# Format: readerId|fullName|phoneNumber|readerType");
-            bw.newLine();
-            bw.write("# readerType: STUDENT | PRIORITY_STUDENT | LECTURER");
-            bw.newLine();
-
-            for (Reader r : readers) {
-                String type = "STUDENT";
-                if (r instanceof LecturerReader) {
-                    type = "LECTURER";
-                } else if (r instanceof PriorityStudentReader) {
-                    type = "PRIORITY_STUDENT";
-                }
-
-                bw.write(String.format("%s|%s|%s|%s", r.getUserId(), r.getFullName(), r.getPhoneNumber(), type));
-                bw.newLine(); // CẢI TIẾN: Thay đổi cộng chuỗi bằng hàm ngắt dòng hệ thống an toàn đa nền tảng
-            }
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, readers);
         } catch (IOException e) {
-            System.err.println("[ReaderRepository] Lỗi nghiêm trọng xảy ra khi ghi file bạn đọc: " + e.getMessage());
+            System.err.println("[ReaderRepository] Lỗi ghi file JSON bạn đọc: " + e.getMessage());
         }
     }
 
-    /**
-     * Thiết lập bộ dữ liệu mẫu độc giả chuẩn mã BDxxx đồng bộ với cơ sở dữ liệu thực tế.
-     */
-    private void initMockData() {
-        readers.add(new StudentReader("BD001", "Nguyen Van An", "0901234567"));
-        readers.add(new PriorityStudentReader("BD002", "Tran Thi Bich", "0912345678"));
-        readers.add(new LecturerReader("BD003", "Le Van Cuong", "0923456789"));
-        readers.add(new StudentReader("BD004", "Pham Thi Dung", "0934567890"));
-        readers.add(new PriorityStudentReader("BD005", "Hoang Van Em", "0945678901"));
-        saveToFile(); // Đồng bộ lưu file text cứng
+    private void loadFromFile() {
+        File file = new File(FILE_PATH);
+        if (!file.exists()) return;
+        try {
+            // Jackson tự động dựa vào @JsonTypeInfo ở lớp Reader để ép về đúng class con (Student/Lecturer)
+            List<Reader> loadedReaders = objectMapper.readValue(file, new TypeReference<List<Reader>>() {});
+            readers.addAll(loadedReaders);
+        } catch (IOException e) {
+            System.err.println("[ReaderRepository] Lỗi nạp file JSON bạn đọc: " + e.getMessage());
+        }
     }
 }

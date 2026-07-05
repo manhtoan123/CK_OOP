@@ -16,6 +16,13 @@ public class LecturerReader extends Reader {
     private static final String READER_TYPE      = "Giảng viên";
 
     /**
+     * [BỔ SUNG CHO GIAI ĐOẠN 2]: Constructor mặc định không tham số phục vụ giải tuần tự hóa JSON (Jackson)
+     */
+    public LecturerReader() {
+        super("TEMP_ID", "TEMP_NAME", "TEMP_PHONE", new LecturerFinePolicy()); // Thay "" bằng "TEMP_..."
+    }
+
+    /**
      * Constructor khởi tạo tài khoản bạn đọc cho Giảng viên.
      * Tự động liên kết (tiêm) đối tượng chiến lược LecturerFinePolicy vào lớp cha.
      *
@@ -53,8 +60,6 @@ public class LecturerReader extends Reader {
 
     /**
      * Lấy định mức số tiền phạt quá hạn cơ sở mỗi ngày.
-     * Phục vụ cho mục đích hiển thị thông tin tra cứu nhanh.
-     * @return 2000
      */
     @Override
     public int getFinePerDay() {

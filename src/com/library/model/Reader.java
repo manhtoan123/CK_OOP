@@ -1,14 +1,30 @@
 package com.library.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.library.service.policy.FinePolicy; // Import bản chuẩn interface chiến lược phạt
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+
 /**
  * Lớp trừu tượng (Abstract class) đại diện cho Bạn đọc trong hệ thống thư viện.
  * Kế thừa từ lớp cơ sở User và đóng vai trò cấu hình đa hình cho Strategy Pattern.
+ * ĐÃ NHÚNG CẤU HÌNH ĐA HÌNH JSON CHUẨN KIẾN TRÚC.
  */
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "readerType" // Tên thuộc tính phân loại độc giả trong file JSON dùng làm khóa ánh xạ
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = StudentReader.class, name = "Sinh viên thường"),
+        @JsonSubTypes.Type(value = PriorityStudentReader.class, name = "Sinh viên ưu tiên"),
+        @JsonSubTypes.Type(value = LecturerReader.class, name = "Giảng viên")
+})
+@JsonIgnoreProperties(ignoreUnknown = true)
 public abstract class Reader extends User {
 
-    // CẢI TIẾN: Chuyển từ protected sang private để đảm bảo tính đóng gói tuyệt đối
+    // Sử dụng @JsonIgnore để ngăn Jackson serialize/deserialize interface FinePolicy thành các trường rỗng độc lập
     @JsonIgnore
     private final FinePolicy finePolicy;
 
@@ -63,7 +79,7 @@ public abstract class Reader extends User {
     public String toString() {
         return super.toString()
                 + ", readerType='" + getReaderType() + "'"
-                + ", maxBorrowLimit=" + getMaxBorrowLimit()
-                + ", finePerDay=" + getFinePerDay() + "đ";
+                + ", finePerDay=" + getFinePerDay()
+                + ", maxBorrowLimit=" + getMaxBorrowLimit();
     }
 }

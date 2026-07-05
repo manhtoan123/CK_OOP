@@ -1,164 +1,118 @@
 package com.library.repository;
-import org.springframework.stereotype.Repository;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.library.model.BorrowTicket;
-import com.library.model.BorrowTicketDetail;
-import java.io.*;
-import java.time.LocalDate;
-import java.util.ArrayList;
+import org.springframework.stereotype.Repository;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger; // Khai báo thư viện biến nguyên tử an toàn đa luồng
 
 @Repository
-
 /**
- * Tầng quản lý lưu trữ dữ liệu Phiếu mượn - Đọc ghi dữ liệu file text 'data/tickets.txt'
- * Đã được chuẩn hóa chống crash lỗi ép kiểu ngày tháng và hỗ trợ đồng bộ thời gian thực.
+ * Tầng quản lý lưu trữ dữ liệu Phiếu mượn - Đọc ghi dữ liệu file JSON 'data/tickets.json'
+ * Đã cấu hình Thread-safe (An toàn đa luồng) và tối ưu thuật toán sinh mã tăng tiến tự động O(1).
  */
 public class BorrowTicketRepository {
-    private static final String FILE_PATH = "data/tickets.txt";
-    private final List<BorrowTicket> tickets = new ArrayList<>();
+    private static final String FILE_PATH = "data/tickets.json";
 
-    /**
-     * Khởi tạo tầng quản lý phiếu và tự động tải dữ liệu lịch sử từ file text lên RAM.
-     */
+    // findAndRegisterModules giúp Jackson hiểu và xử lý tự động cấu trúc java.time.LocalDate
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+
+    // Nhiệm vụ 3.2: Sử dụng CopyOnWriteArrayList để loại bỏ lỗi ConcurrentModificationException khi chạy đa luồng
+    private final List<BorrowTicket> tickets = new CopyOnWriteArrayList<>();
+
+    // Nhiệm vụ 3.3: Khai báo biến nguyên tử nội bộ để quản lý số thứ tự phiếu mượn lớn nhất
+    private final AtomicInteger currentMaxId = new AtomicInteger(0);
+
     public BorrowTicketRepository() {
         loadFromFile();
     }
 
-    /**
-     * Lấy danh sách toàn bộ phiếu mượn/trả sách đang quản lý trên bộ nhớ RAM.
-     * Áp dụng tính năng Defensive Copy bảo vệ cấu trúc mảng gốc hệ thống.
-     *
-     * @return Danh sách phiếu mượn dưới dạng Chỉ đọc (Unmodifiable List)
-     */
     public List<BorrowTicket> getAll() {
         return Collections.unmodifiableList(tickets);
     }
 
-    /**
-     * Tìm kiếm phiếu mượn cụ thể dựa theo mã số số phiếu (Không phân biệt chữ hoa/thường).
-     *
-     * @param ticketId Mã phiếu mượn cần tìm (Ví dụ: PT001)
-     * @return Đối tượng BorrowTicket nếu tìm thấy, ngược lại trả về null
-     */
     public BorrowTicket findById(String ticketId) {
         if (ticketId == null) return null;
-        String trimmedId = ticketId.trim();
-        for (BorrowTicket ticket : tickets) {
-            if (ticket.getTicketId().equalsIgnoreCase(trimmedId)) {
-                return ticket;
-            }
-        }
-        return null;
+        return tickets.stream()
+                .filter(t -> t.getTicketId().equalsIgnoreCase(ticketId.trim()))
+                .findFirst()
+                .orElse(null);
     }
 
-    /**
-     * Đăng ký thêm một phiếu mượn sách mới vào hệ thống và đồng bộ ngay xuống file text.
-     *
-     * @param ticket Đối tượng phiếu mượn mới khởi tạo thành công ở tầng Service
-     */
-    public void add(BorrowTicket ticket) {
+    public synchronized void add(BorrowTicket ticket) {
         if (ticket != null) {
             tickets.add(ticket);
-            saveToFile(); // Tự động cập nhật file tickets.txt ngay lập tức
+            saveToFile();
         }
     }
 
-    /**
-     * Cập nhật trạng thái phiếu mượn (Ví dụ: Chuyển sang Đã trả, cập nhật ngày trả thực tế, tiền phạt).
-     *
-     * @param updatedTicket Đối tượng phiếu mượn mang dữ liệu mới cần ghi đè
-     */
-    public void update(BorrowTicket updatedTicket) {
+    public synchronized void update(BorrowTicket updatedTicket) {
         if (updatedTicket == null) return;
         for (int i = 0; i < tickets.size(); i++) {
             if (tickets.get(i).getTicketId().equalsIgnoreCase(updatedTicket.getTicketId())) {
                 tickets.set(i, updatedTicket);
-                saveToFile(); // Đồng bộ trạng thái mới xuống file text cứng
-                return;
+                break;
             }
         }
+        saveToFile();
     }
 
     /**
-     * Đọc và phân tích dữ liệu dòng text từ file 'data/tickets.txt' đưa lên RAM.
+     * Nhiệm vụ 3.3: Hàm sinh mã phiếu mượn tiếp theo chuẩn thread-safe với độ phức tạp tuyệt đối O(1).
+     * Loại bỏ hoàn toàn sự phụ thuộc vào vòng lặp duyệt mảng của IdGenerator cũ.
+     * * @return Chuỗi mã phiếu mượn mới định dạng PTxxx (Ví dụ: PT006)
      */
+    public String generateNextId() {
+        // incrementAndGet() tự động tăng giá trị lên 1 và trả về kết quả theo cơ chế Lock-free nguyên tử
+        int nextNum = currentMaxId.incrementAndGet();
+        return String.format("PT%03d", nextNum);
+    }
+
+    private synchronized void saveToFile() {
+        try {
+            File file = new File(FILE_PATH);
+            if (file.getParentFile() != null) {
+                file.getParentFile().mkdirs();
+            }
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, tickets);
+        } catch (IOException e) {
+            System.err.println("[BorrowTicketRepository] Lỗi ghi file JSON phiếu mượn: " + e.getMessage());
+        }
+    }
+
     private void loadFromFile() {
-        tickets.clear();
         File file = new File(FILE_PATH);
-        if (!file.exists()) return; // Nếu chạy lần đầu chưa có phiếu, bỏ qua nạp file
+        if (!file.exists()) return;
+        try {
+            List<BorrowTicket> loadedTickets = objectMapper.readValue(file, new TypeReference<List<BorrowTicket>>() {});
+            tickets.addAll(loadedTickets);
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                line = line.trim();
-                // Bỏ qua các dòng trống hoặc các dòng chú thích định dạng cột bằng dấu #
-                if (line.isEmpty() || line.startsWith("#")) continue;
-
-                try {
-                    String[] parts = line.split("\\|");
-                    if (parts.length >= 8) {
-                        String ticketId = parts[0].trim();
-                        String readerId = parts[1].trim();
-                        LocalDate borrowDate = LocalDate.parse(parts[2].trim());
-                        LocalDate dueDate = LocalDate.parse(parts[3].trim());
-
-                        // Khởi tạo đối tượng phiếu mượn cơ sở
-                        BorrowTicket ticket = new BorrowTicket(ticketId, readerId, borrowDate, dueDate);
-
-                        // Xử lý an toàn cột Ngày trả thực tế: Tránh lỗi parse chuỗi "null"
-                        String returnDateStr = parts[4].trim();
-                        if (!returnDateStr.equalsIgnoreCase("null")) {
-                            ticket.setReturnDate(LocalDate.parse(returnDateStr));
+            // Nhiệm vụ 3.3: Tìm số thứ tự mã lớn nhất ngay khi nạp file lần đầu tiên để cấu hình biến Atomic
+            int maxId = 0;
+            for (BorrowTicket t : loadedTickets) {
+                if (t.getTicketId() != null && t.getTicketId().toUpperCase().startsWith("PT")) {
+                    try {
+                        // Trích xuất phần số từ chuỗi "PT005" -> 5
+                        int idNum = Integer.parseInt(t.getTicketId().substring(2));
+                        if (idNum > maxId) {
+                            maxId = idNum;
                         }
-
-                        // Phục hồi các trạng thái nghiệp vụ và số tiền phạt đi kèm
-                        ticket.setStatusByValue(parts[5].trim());
-                        ticket.setFineAmount(Double.parseDouble(parts[6].trim()));
-
-                        // Bóc tách danh sách sách mượn phức hợp dạng: MãSách:SốLượng,MãSách:SốLượng
-                        String detailsStr = parts[7].trim();
-                        String[] detailsArr = detailsStr.split(",");
-                        for (String d : detailsArr) {
-                            String[] kv = d.split(":");
-                            if (kv.length == 2) {
-                                String bookId = kv[0].trim();
-                                int quantity = Integer.parseInt(kv[1].trim());
-                                ticket.addDetail(new BorrowTicketDetail(bookId, quantity));
-                            }
-                        }
-                        tickets.add(ticket);
+                    } catch (NumberFormatException ignored) {
+                        // Chủ động bỏ qua các mã hỏng định dạng số
                     }
-                } catch (Exception e) {
-                    // Bỏ qua dòng lỗi cục bộ của 1 phiếu hỏng định dạng, đảm bảo các phiếu mượn khác vẫn nạp thành công
-                    System.err.println("[BorrowTicketRepository] Bỏ qua dòng phiếu lỗi định dạng: " + line);
                 }
             }
+            // Khởi tạo giá trị mốc ban đầu cho bộ đếm nguyên tử
+            currentMaxId.set(maxId);
+
         } catch (IOException e) {
-            System.err.println("[BorrowTicketRepository] Lỗi nghiêm trọng khi đọc dữ liệu phiếu: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Ghi đè toàn bộ danh sách phiếu mượn đang quản lý trên bộ nhớ RAM xuống file text 'data/tickets.txt'.
-     */
-    private void saveToFile() {
-        File file = new File(FILE_PATH);
-        if (file.getParentFile() != null) {
-            file.getParentFile().mkdirs();
-        }
-
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(file))) {
-            // Ghi cấu trúc văn bản hướng dẫn cột dữ liệu ở đầu file text
-            bw.write("# MãPhiếu|MãBạnĐọc|NgàyMượn|NgàyHẹnTrả|NgàyTrảThựcTế|TrạngThái|TiềnPhạt|ChiTiếtMượn");
-            bw.newLine();
-
-            for (BorrowTicket t : tickets) {
-                bw.write(t.toFileFormat());
-                bw.newLine(); // Xuống dòng an toàn đa nền tảng
-            }
-        } catch (IOException e) {
-            System.err.println("[BorrowTicketRepository] Lỗi nghiêm trọng khi ghi dữ liệu phiếu: " + e.getMessage());
+            System.err.println("[BorrowTicketRepository] Lỗi nạp file JSON phiếu mượn: " + e.getMessage());
         }
     }
 }

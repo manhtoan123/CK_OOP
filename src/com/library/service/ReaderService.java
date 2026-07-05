@@ -1,139 +1,108 @@
 package com.library.service;
 
+import com.library.exception.DataNotFoundException;
 import com.library.model.Reader;
 import com.library.repository.ReaderRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
 @Service
-
 /**
- * Tầng xử lý logic nghiệp vụ liên quan đến Độc giả (Bạn đọc).
- * Đã loại bỏ hoàn toàn sự phụ thuộc vào ValidationUtils bằng cách chuẩn hóa bộ lọc kiểm tra inline,
- * và đồng bộ chính xác với cấu trúc ReaderRepository mới.
+ * Tầng xử lý logic nghiệp vụ liên quan đến Độc giả.
+ * ĐÃ CẬP NHẬT BỘ NGOẠI LỆ CHUYÊN BIỆT THEO NHIỆM VỤ 4.3 VÀ BỔ SUNG ĐẦY ĐỦ HÀM CRUD PHỤC VỤ REAC FRONTEND.
  */
 public class ReaderService {
     private final ReaderRepository readerRepository;
 
-    /**
-     * Constructor tiêm (Inject) ReaderRepository từ ngoài vào để tương tác dữ liệu.
-     */
     public ReaderService(ReaderRepository readerRepository) {
-        if (readerRepository == null) {
-            throw new IllegalArgumentException("Lỗi hệ thống: ReaderRepository truyền vào không được phép để null!");
-        }
         this.readerRepository = readerRepository;
     }
 
-    /**
-     * Lấy danh sách toàn bộ độc giả có trên hệ thống để hiển thị lên giao diện UI.
-     *
-     * @return Danh sách Độc giả (Chỉ đọc)
-     */
     public List<Reader> getAllReaders() {
         return readerRepository.getAll();
     }
 
     /**
-     * Tìm kiếm một độc giả cụ thể dựa vào mã bạn đọc.
-     *
-     * @param readerId Mã độc giả cần tìm (Ví dụ: BD001)
-     * @return Đối tượng Reader nếu tìm thấy
+     * 🛠️ Nhiệm vụ 4.3: Áp dụng DataNotFoundException khi tìm kiếm tài khoản độc giả không tồn tại.
      */
-    public Reader getReaderById(String readerId) {
+    public Reader getReaderById(String readerId) throws DataNotFoundException {
         if (readerId == null || readerId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Lỗi: Mã bạn đọc tìm kiếm không được phép để trống!");
+            throw new IllegalArgumentException("Lỗi: Mã độc giả cần tìm không được phép để trống!");
         }
-
         Reader reader = readerRepository.findById(readerId.trim());
         if (reader == null) {
-            throw new IllegalArgumentException("Lỗi nghiệp vụ: Không tìm thấy bạn đọc có mã '" + readerId + "' trong hệ thống!");
+            throw new DataNotFoundException("Lỗi nghiệp vụ: Không tìm thấy tài khoản độc giả mang mã '" + readerId + "' trên hệ thống!");
         }
         return reader;
     }
 
-    /**
-     * Nghiệp vụ thêm mới một bạn đọc vào hệ thống thư viện.
-     * Tự động kiểm tra định dạng dữ liệu đầu vào không cần ValidationUtils.
-     */
-    public void addReader(Reader reader) {
-        if (reader == null || reader.getUserId() == null) {
-            throw new IllegalArgumentException("Lỗi: Dữ liệu tài khoản bạn đọc không hợp lệ!");
+    public void registerReader(Reader reader) {
+        if (reader == null || reader.getUserId() == null || reader.getUserId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Lỗi nghiệp vụ: Thông tin bạn đọc đăng ký không hợp lệ!");
         }
-
-        // Kiểm tra phòng vệ chống trùng lặp mã ID
-        if (readerRepository.findById(reader.getUserId()) != null) {
+        if (readerRepository.findById(reader.getUserId().trim()) != null) {
             throw new IllegalArgumentException("Lỗi nghiệp vụ: Mã bạn đọc '" + reader.getUserId() + "' đã tồn tại trên hệ thống!");
         }
 
-        // Kiểm tra tính hợp lệ của họ tên và số điện thoại
         validateReaderData(reader.getFullName(), reader.getPhoneNumber());
-
-        // Đưa vào kho lưu trữ dữ liệu và kích hoạt lưu file text cứng
         readerRepository.add(reader);
-        System.out.println("[ReaderService] Thêm bạn đọc mới thành công: " + reader.getFullName());
     }
 
     /**
-     * Nghiệp vụ xóa một bạn đọc khỏi hệ thống.
-     * Kiểm tra sự tồn tại trước khi xóa để tránh lỗi dữ liệu.
+     * 🛠️ BỔ SUNG CHO FRONTEND: Hàm cập nhật thông tin thẻ độc giả (Sửa)
+     * Khớp nối chính xác 100% với tên hàm gọi từ LibraryApiController.
      */
-    public void deleteReader(String id) {
-        if (id == null || id.trim().isEmpty()) {
-            throw new IllegalArgumentException("Lỗi: Mã bạn đọc cần xóa không được để trống!");
+    public void updateReader(String id, Reader reader) throws DataNotFoundException {
+        if (id == null || id.trim().isEmpty() || reader == null) {
+            throw new IllegalArgumentException("Lỗi nghiệp vụ: Dữ liệu bạn đọc cần cập nhật không hợp lệ!");
         }
-
-        // Kiểm tra xem độc giả có tồn tại hay không
         if (readerRepository.findById(id.trim()) == null) {
-            throw new IllegalArgumentException("Lỗi: Không tìm thấy bạn đọc mã '" + id + "' để xóa!");
+            throw new DataNotFoundException("Không thể cập nhật! Không tồn tại độc giả mang mã '" + id + "' trên hệ thống JSON!");
         }
 
-        // Gọi Repository để xóa
-        // LƯU Ý: Kiểm tra file ReaderRepository.java của bạn xem hàm xóa tên là delete() hay remove()
-        readerRepository.delete(id.trim());
-
-        System.out.println("[ReaderService] Đã xóa bạn đọc thành công: " + id);
-    }
-
-    /**
-     * Nghiệp vụ cập nhật thông tin chỉnh sửa của một bạn đọc hiện hành.
-     */
-    public void updateReader(Reader reader) {
-        if (reader == null || reader.getUserId() == null) {
-            throw new IllegalArgumentException("Lỗi: Dữ liệu cập nhật bạn đọc không hợp lệ!");
-        }
-
-        // Bẫy lỗi nếu đối tượng chỉnh sửa không có thật trong kho dữ liệu
-        Reader existing = readerRepository.findById(reader.getUserId());
-        if (existing == null) {
-            throw new IllegalArgumentException("Lỗi nghiệp vụ: Không tìm thấy bạn đọc mang mã '" + reader.getUserId() + "' để cập nhật!");
-        }
-
-        // Kiểm tra tính hợp lệ của họ tên và số điện thoại mới
         validateReaderData(reader.getFullName(), reader.getPhoneNumber());
-
-        // Kích hoạt đồng bộ sửa đổi xuống file cứng
+        // Gọi xuống tầng lưu trữ tệp JSON để ghi đè thông tin mới
         readerRepository.update(reader);
-        System.out.println("[ReaderService] Cập nhật thông tin bạn đọc thành công: " + reader.getFullName());
     }
 
     /**
-     * BỘ LỌC KIỂM TRA DỮ LIỆU NỘI BỘ (Thay thế hoàn toàn cho ValidationUtils bị mất)
-     * Đảm bảo tính đóng gói nghiệp vụ sạch sẽ ngay tại tầng Service.
+     * 🛠️ BỔ SUNG CHO FRONTEND: Hàm xóa hoàn toàn tài khoản độc giả khỏi tệp JSON (Xóa)
+     * Khớp nối chính xác 100% với tên hàm gọi từ LibraryApiController.
      */
+    public void deleteReader(String id) throws DataNotFoundException {
+        if (id == null || id.trim().isEmpty()) {
+            throw new IllegalArgumentException("Lỗi nghiệp vụ: Mã độc giả cần xóa không hợp lệ!");
+        }
+        if (readerRepository.findById(id.trim()) == null) {
+            throw new DataNotFoundException("Không thể xóa! Không tồn tại độc giả mang mã '" + id + "' trên hệ thống JSON!");
+        }
+
+        // Thực hiện lệnh xóa trong kho lưu trữ dữ liệu
+        // 💡 Mẹo nhỏ: Nếu file ReaderRepository của nhóm đặt tên hàm xóa là .deleteById() hoặc .remove()
+        // thì bạn chỉ cần sửa chữ .delete() dưới đây thành tên hàm thực tế đó của nhóm là được nhé!
+        readerRepository.delete(id.trim());
+    }
+
+    /**
+     * Giữ lại hàm cũ của nhóm để bảo toàn các luồng kiểm thử cũ (nếu có)
+     */
+    public void updateReaderInfo(Reader reader) throws DataNotFoundException {
+        if (reader == null) return;
+        updateReader(reader.getUserId(), reader);
+    }
+
     private void validateReaderData(String fullName, String phoneNumber) {
         if (fullName == null || fullName.trim().isEmpty()) {
             throw new IllegalArgumentException("Lỗi nghiệp vụ: Họ và tên bạn đọc không được phép để trống!");
         }
         if (fullName.trim().length() < 2) {
-            throw new IllegalArgumentException("Lỗi nghiệp vụ: Họ và tên quá ngắn, vui lòng nhập đầy đủ họ tên!");
+            throw new IllegalArgumentException("Lỗi nghiệp vụ: Họ và tên quá ngắn!");
         }
         if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
             throw new IllegalArgumentException("Lỗi nghiệp vụ: Số điện thoại liên lạc không được phép để trống!");
         }
-        // Kiểm tra số điện thoại bằng biểu thức chính quy Regex tiêu chuẩn (Yêu cầu chỉ chứa từ 10 đến 11 chữ số)
         if (!phoneNumber.trim().matches("\\d{10,11}")) {
-            throw new IllegalArgumentException("Lỗi định dạng: Số điện thoại không hợp lệ! (Phải chứa từ 10 đến 11 ký tự số).");
+            throw new IllegalArgumentException("Lỗi định dạng: Số điện thoại phải chỉ chứa từ 10 đến 11 chữ số!");
         }
     }
 }

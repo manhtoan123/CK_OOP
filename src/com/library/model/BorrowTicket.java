@@ -8,6 +8,7 @@ import java.util.List;
 /**
  * Lớp thực thể đại diện cho Phiếu mượn/trả sách của thư viện.
  * Quản lý trạng thái mượn và danh sách chi tiết các cuốn sách được mượn cùng lúc.
+ * ĐÃ CHUẨN HÓA KIỂU DỮ LIỆU TIỀN TỆ SANG LONG VÀ TƯƠNG THÍCH JSON MAPPER.
  */
 public class BorrowTicket {
 
@@ -29,16 +30,16 @@ public class BorrowTicket {
         }
 
         /**
-         * Chuyển đổi linh hoạt từ văn bản tiếng Việt của file .txt sang Enum tương ứng.
+         * Chuyển đổi linh hoạt từ văn bản hoặc tên Enum sang trạng thái chuẩn.
          */
         public static TicketStatus fromValue(String value) {
             if (value == null) return BORROWING;
             for (TicketStatus status : TicketStatus.values()) {
-                if (status.getValue().equalsIgnoreCase(value.trim())) {
+                if (status.getValue().equalsIgnoreCase(value.trim()) || status.name().equalsIgnoreCase(value.trim())) {
                     return status;
                 }
             }
-            return BORROWING; // Mặc định là đang mượn nếu dữ liệu không khớp
+            return BORROWING;
         }
     }
 
@@ -46,49 +47,92 @@ public class BorrowTicket {
     private String readerId;
     private LocalDate borrowDate;
     private LocalDate dueDate;
-    private LocalDate returnDate; // Sẽ là null nếu độc giả chưa trả sách
+    private LocalDate returnDate;
     private TicketStatus status;
-    private double fineAmount;
-    private final List<BorrowTicketDetail> details = new ArrayList<>();
+    private long finePaid; // 🛠️ ĐÃ SỬA: Chuyển đổi từ double sang long để lưu tiền VND chuẩn xác
+    private List<BorrowTicketDetail> details = new ArrayList<>();
 
     /**
-     * Constructor khởi tạo một phiếu mượn mới.
+     * [BỔ SUNG CHO GIAI ĐOẠN 2]: Constructor mặc định không tham số
+     * Bắt buộc phải có để Jackson ObjectMapper có thể tự khởi tạo và nạp dữ liệu từ file tickets.json.
      */
-    public BorrowTicket(String ticketId, String readerId, LocalDate borrowDate, LocalDate dueDate) {
-        this.ticketId = ticketId != null ? ticketId.trim() : "";
-        this.readerId = readerId != null ? readerId.trim() : "";
-        this.borrowDate = borrowDate;
-        this.dueDate = dueDate;
-        this.status = TicketStatus.BORROWING; // Phiếu mới tạo luôn ở trạng thái Đang mượn
-        this.fineAmount = 0.0;
+    public BorrowTicket() {
     }
 
-    // ─── Getters & Setters (Tuân thủ tính Encapsulation) ───────────
+    /**
+     * Constructor đầy đủ tham số dùng để khởi tạo nhanh phiếu mượn mới.
+     */
+    public BorrowTicket(String ticketId, String readerId, LocalDate borrowDate, LocalDate dueDate,
+                        LocalDate returnDate, TicketStatus status, long finePaid, List<BorrowTicketDetail> details) {
+        setTicketId(ticketId);
+        setReaderId(readerId);
+        this.borrowDate = borrowDate;
+        this.dueDate = dueDate;
+        this.returnDate = returnDate;
+        this.status = status;
+        setFinePaid(finePaid);
+        this.details = details != null ? new ArrayList<>(details) : new ArrayList<>();
+    }
 
-    public String getTicketId() { return ticketId; }
-    public void setTicketId(String ticketId) { this.ticketId = ticketId; }
+    // ─── Getters & Setters (Đóng gói an toàn hệ thống) ─────────────────────────
 
-    public String getReaderId() { return readerId; }
-    public void setReaderId(String readerId) { this.readerId = readerId; }
+    public String getTicketId() {
+        return ticketId;
+    }
 
-    public LocalDate getBorrowDate() { return borrowDate; }
-    public void setBorrowDate(LocalDate borrowDate) { this.borrowDate = borrowDate; }
+    public void setTicketId(String ticketId) {
+        this.ticketId = ticketId != null ? ticketId.trim().toUpperCase() : "";
+    }
 
-    public LocalDate getDueDate() { return dueDate; }
-    public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
+    public String getReaderId() {
+        return readerId;
+    }
 
-    public LocalDate getReturnDate() { return returnDate; }
-    public void setReturnDate(LocalDate returnDate) { this.returnDate = returnDate; }
+    public void setReaderId(String readerId) {
+        this.readerId = readerId != null ? readerId.trim().toUpperCase() : "";
+    }
 
-    public TicketStatus getStatus() { return status; }
-    public void setStatus(TicketStatus status) { this.status = status; }
+    public LocalDate getBorrowDate() {
+        return borrowDate;
+    }
 
-    public String getStatusValue() { return status.getValue(); }
-    public void setStatusByValue(String statusStr) { this.status = TicketStatus.fromValue(statusStr); }
+    public void setBorrowDate(LocalDate borrowDate) {
+        this.borrowDate = borrowDate;
+    }
 
-    public double getFineAmount() { return fineAmount; }
-    public void setFineAmount(double fineAmount) {
-        this.fineAmount = Math.max(0.0, fineAmount); // Chặn giá trị tiền phạt âm
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
+    public LocalDate getReturnDate() {
+        return returnDate;
+    }
+
+    public void setReturnDate(LocalDate returnDate) {
+        this.returnDate = returnDate;
+    }
+
+    public TicketStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(TicketStatus status) {
+        this.status = status;
+    }
+
+    public long getFinePaid() {
+        return finePaid;
+    }
+
+    /**
+     * Sửa đổi Setter để nhận giá trị số nguyên long và chặn hoàn toàn giá trị phạt âm.
+     */
+    public void setFinePaid(long finePaid) {
+        this.finePaid = Math.max(0L, finePaid);
     }
 
     /**
@@ -97,6 +141,10 @@ public class BorrowTicket {
      */
     public List<BorrowTicketDetail> getDetails() {
         return Collections.unmodifiableList(details);
+    }
+
+    public void setDetails(List<BorrowTicketDetail> details) {
+        this.details = details != null ? new ArrayList<>(details) : new ArrayList<>();
     }
 
     /**
@@ -108,30 +156,14 @@ public class BorrowTicket {
         }
     }
 
-    // ─── Xử lý định dạng File text IO ─────────────────────────────────────────
-
-    /**
-     * Chuyển đổi toàn bộ thông tin phiếu mượn thành một dòng text chuẩn hóa
-     * phân tách bằng dấu gạch đứng để ghi xuống file tickets.txt.
-     */
-    public String toFileFormat() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < details.size(); i++) {
-            sb.append(details.get(i).toString());
-            if (i < details.size() - 1) {
-                sb.append(",");
-            }
-        }
-
-        // Trả về chuỗi map khớp hoàn toàn 8 cột dữ liệu lưu trữ
-        return String.format("%s|%s|%s|%s|%s|%s|%.1f|%s",
-                ticketId,
-                readerId,
-                borrowDate,
-                dueDate,
-                (returnDate == null ? "null" : returnDate.toString()), // Đồng bộ giá trị null dạng text
-                status.getValue(),
-                fineAmount,
-                sb.toString());
+    @Override
+    public String toString() {
+        return "BorrowTicket{" +
+                "ticketId='" + ticketId + '\'' +
+                ", readerId='" + readerId + '\'' +
+                ", status=" + status +
+                ", finePaid=" + finePaid +
+                ", detailsCount=" + details.size() +
+                '}';
     }
 }

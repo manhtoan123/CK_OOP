@@ -1,0 +1,57 @@
+[ {
+  "bookId" : "B001",
+  "title" : "Lap trinh Java can ban",
+  "author" : "Nguyen Van A",
+  "category" : "Giao trinh",
+  "quantity" : 15,
+  "price" : 50000.0
+}, {
+  "bookId" : "B002",
+  "title" : "Cau truc du lieu va Giai thuat",
+  "author" : "Tran Van B",
+  "category" : "Giao trinh",
+  "quantity" : 7,
+  "price" : 60000.0
+}, {
+  "bookId" : "B003",
+  "title" : "Thiet ke huong doi tuong OOP",
+  "author" : "Le Thi C",
+  "category" : "Tham khao",
+  "quantity" : 11,
+  "price" : 75000.0
+}, {
+  "bookId" : "B004",
+  "title" : "Co so du lieu phan tan",
+  "author" : "Dang Thanh D",
+  "category" : "Giao trinh",
+  "quantity" : 5,
+  "price" : 80000.0
+}, {
+  "bookId" : "B005",
+  "title" : "Phan tich va Thiet ke he thong",
+  "author" : "Hoang Ngoc E",
+  "category" : "Tham khao",
+  "quantity" : 20,
+  "price" : 90000.0
+}, {
+  "bookId" : "B006",
+  "title" : "Nhap mon AI",
+  "author" : "Tran Thanh Dat",
+  "category" : "lap trinh",
+  "quantity" : 7,
+  "price" : 50000.0
+}, {
+  "bookId" : "B007",
+  "title" : "DSA",
+  "author" : "Tran Dat",
+  "category" : "Lap Trinh",
+  "quantity" : 10,
+  "price" : 50000.0
+}, {
+  "bookId" : "B008",
+  "title" : "Machine Learning",
+  "author" : "Tran Dat",
+  "category" : "Lap trinh",
+  "quantity" : 5,
+  "price" : 100000.0
+} ]

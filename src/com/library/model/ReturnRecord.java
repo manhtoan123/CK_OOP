@@ -5,23 +5,25 @@ import java.time.LocalDate;
 /**
  * Lớp thực thể đại diện cho Biên bản / Nhật ký giao dịch trả sách (Return Transaction Log).
  * Giúp thư viện lưu vết chi tiết lịch sử các ca trả sách thành công và số tiền phạt đã thu.
+ * ĐÃ CHUẨN HÓA KIỂU DỮ LIỆU TÀI CHÍNH SANG LONG VÀ TÍCH HỢP CONSTRUCTOR MẶC ĐỊNH.
  */
 public class ReturnRecord {
-    private String recordId;    // Mã giao dịch trả sách (Ví dụ: RR001, RR002...)
-    private String ticketId;    // Mã phiếu mượn gốc liên kết dến ca trả sách này
+    private String recordId;      // Mã giao dịch trả sách (Ví dụ: RR001, RR002...)
+    private String ticketId;      // Mã phiếu mượn gốc liên kết đến ca trả sách này
     private LocalDate returnDate; // Ngày thực hiện giao dịch trả sách
-    private double finePaid;    // Số tiền phạt độc giả đã thanh toán tại giao dịch này
+    private long finePaid;        // 🛠️ ĐÃ SỬA: Số tiền phạt thực thu chuyển sang kiểu long tránh sai lệch số thập phân
 
     /**
-     * Constructor khởi tạo một Biên bản trả sách hoàn chỉnh.
-     * Tích hợp kiểm tra phòng vệ dữ liệu đầu vào.
-     *
-     * @param recordId   Mã giao dịch trả sách
-     * @param ticketId   Mã phiếu mượn gốc tương ứng
-     * @param returnDate Ngày thực tế trả sách
-     * @param finePaid   Số tiền phạt thực thu (VND)
+     * [BỔ SUNG CHO GIAI ĐOẠN 2]: Constructor mặc định không tham số
+     * Phục vụ cơ chế nạp ánh xạ dữ liệu tự động của Jackson khi mở rộng lưu file log JSON sau này.
      */
-    public ReturnRecord(String recordId, String ticketId, LocalDate returnDate, double finePaid) {
+    public ReturnRecord() {
+    }
+
+    /**
+     * Constructor khởi tạo một Biên bản trả sách hoàn chỉnh với cơ chế lập trình phòng vệ.
+     */
+    public ReturnRecord(String recordId, String ticketId, LocalDate returnDate, long finePaid) {
         this.recordId = recordId != null ? recordId.trim() : "";
         this.ticketId = ticketId != null ? ticketId.trim() : "";
         this.returnDate = returnDate != null ? returnDate : LocalDate.now();
@@ -35,7 +37,7 @@ public class ReturnRecord {
     }
 
     public void setRecordId(String recordId) {
-        this.recordId = recordId;
+        this.recordId = recordId != null ? recordId.trim() : "";
     }
 
     public String getTicketId() {
@@ -43,7 +45,7 @@ public class ReturnRecord {
     }
 
     public void setTicketId(String ticketId) {
-        this.ticketId = ticketId;
+        this.ticketId = ticketId != null ? ticketId.trim() : "";
     }
 
     public LocalDate getReturnDate() {
@@ -54,28 +56,24 @@ public class ReturnRecord {
         this.returnDate = returnDate;
     }
 
-    public double getFinePaid() {
+    public long getFinePaid() {
         return finePaid;
     }
 
-    public void setFinePaid(double finePaid) {
-        // Chặn giá trị âm, tiền phạt thực tế thu được bắt buộc phải từ 0đ trở lên
-        this.finePaid = Math.max(0.0, finePaid);
-    }
-
-    // ─── Đồng bộ hóa định dạng hiển thị và lưu file text ─────────────────────
-
     /**
-     * Chuẩn hóa định dạng chuỗi phân tách bằng dấu gạch đứng nếu nhóm có nhu cầu
-     * mở rộng ghi lịch sử biên bản trả sách riêng biệt xuống file returns.txt sau này.
+     * Sửa đổi để áp dụng đồng bộ kiểu long và chặn tiền phạt âm an toàn tuyệt đối.
      */
-    public String toFileFormat() {
-        return String.format("%s|%s|%s|%.1f", recordId, ticketId, returnDate, finePaid);
+    public void setFinePaid(long finePaid) {
+        this.finePaid = Math.max(0L, finePaid);
     }
 
     @Override
     public String toString() {
-        return String.format("ReturnRecord[MãGiaoDịch='%s', MãPhiếuMượn='%s', NgàyTrả=%s, TiềnPhạtĐãThu=%,.0fđ]",
-                recordId, ticketId, returnDate, finePaid);
+        return "ReturnRecord{" +
+                "recordId='" + recordId + '\'' +
+                ", ticketId='" + ticketId + '\'' +
+                ", returnDate=" + returnDate +
+                ", finePaid=" + finePaid +
+                '}';
     }
 }

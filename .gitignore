@@ -1,30 +1,45 @@
-/target/
+# ==========================================
+#  PHẦN 1: JAVA / MAVEN / INTELLIJ IDEA
+# ==========================================
+target/
 /out/
-# --- IntelliJ IDEA ---
 .idea/
 *.iml
 *.iws
-
-# --- Maven ---
-target/
+*.class
+.bluej/
+*.log
 .mvn/
 
-# --- OS Files (File rác hệ thống) ---
+# ==========================================
+#  PHẦN 2: NODE / REACT FRONTEND
+# ==========================================
+node_modules/
+/frontend/node_modules/
+dist/
+/frontend/dist/
+/frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.parcel-cache
+
+# ==========================================
+#  PHẦN 3: BẢO MẬT & FILE MÔI TRƯỜNG
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# ==========================================
+#  PHẦN 4: FILE RÁC HỆ ĐIỀU HÀNH
+# ==========================================
 .DS_Store
 Thumbs.db
 
-# --- Logs & Temp ---
-*.log
-*.tmp
-logs/
-temp/
-
-# --- Eclipse Files (Nếu sau này bạn mở bằng Eclipse) ---
-.settings/
-.project
-.classpath
-bin/
-
-# --- File bảo mật/Môi trường (Tùy chọn) ---
-*.env
-.env
+#  LƯU Ý ĐỒ ÁN MÔN HỌC:
+# KHÔNG ignore thư mục data/*.json (Ví dụ: data/readers.json, books.json)
+# Việc giữ lại các file này giúp thầy cô khi clone code về máy sẽ có SẴN DỮ LIỆU TEST để chạy nghiệm thu ngay lập tức!

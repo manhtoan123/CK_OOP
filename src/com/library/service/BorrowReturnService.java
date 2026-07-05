@@ -1,31 +1,29 @@
 package com.library.service;
 
-import com.library.exception.LibraryException;
+import com.library.exception.BorrowLimitExceededException;
+import com.library.exception.DataNotFoundException;
+import com.library.exception.OutOfStockException;
 import com.library.model.*;
 import com.library.repository.BookRepository;
 import com.library.repository.BorrowTicketRepository;
 import com.library.repository.ReaderRepository;
-import com.library.utils.IdGenerator;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
 @Service
-
 /**
- * Tầng xử lý nghiệp vụ trung tâm (Business Logic Layer) quản lý mượn và trả sách.
- * Kết nối đồng bộ dữ liệu giữa các kho lưu trữ và áp dụng Strategy Pattern tính phí phạt.
+ * Tầng xử lý nghiệp vụ trung tâm quản lý mượn và trả sách.
+ * ĐÃ CẬP NHẬT TRUYỀN HẠN TRẢ (DUE DATE) ĐỂ PHỤC VỤ TÍNH PHÍ PHẠT TRÊN FRONTEND REALTIME.
  */
 public class BorrowReturnService {
     private final BorrowTicketRepository borrowTicketRepository;
     private final BookRepository bookRepository;
     private final ReaderRepository readerRepository;
 
-    /**
-     * Constructor tiêm (Inject) các repository phụ thuộc vào để quản lý tập trung.
-     */
     public BorrowReturnService(BorrowTicketRepository borrowTicketRepository,
                                BookRepository bookRepository,
                                ReaderRepository readerRepository) {
@@ -35,133 +33,167 @@ public class BorrowReturnService {
     }
 
     /**
-     * NGHIỆP VỤ 1: XỬ LÝ ĐĂNG KÝ MƯỢN SÁCH mới
-     * Kiểm tra điều kiện phòng vệ nghiêm ngặt trước khi cấp phiếu mượn.
+     * 🌟 BỔ SUNG CHO FRONTEND TABLE: Lấy toàn bộ danh sách các đầu sách đang được mượn hiện hành
+     * ĐÃ CẬP NHẬT: Truyền thêm ticket.getDueDate() sang đối tượng BorrowRecord để hiển thị lên bảng React.
      */
-    public void borrowBook(String readerId, String bookId, int quantity) throws LibraryException {
-        // 1. Kiểm tra sự tồn tại của Độc giả
-        Reader reader = readerRepository.findById(readerId);
-        if (reader == null) {
-            throw new LibraryException("Mã bạn đọc '" + readerId + "' không tồn tại trên hệ thống!");
+    public List<BorrowRecord> getAllRecords() {
+        List<BorrowRecord> activeRecords = new ArrayList<>();
+        // 1. Đọc toàn bộ danh sách phiếu mượn từ Repo cứng JSON nạp lên RAM
+        List<BorrowTicket> allTickets = borrowTicketRepository.getAll();
+
+        if (allTickets != null) {
+            for (BorrowTicket ticket : allTickets) {
+                // 2. Chỉ lọc lấy những phiếu mượn có trạng thái đang hoạt động (Chưa hoàn trả)
+                if (ticket.getStatus() == BorrowTicket.TicketStatus.BORROWING) {
+                    // 3. Duyệt mảng chi tiết bên trong phiếu để bóc tách cặp ReaderId - BookId tương ứng
+                    if (ticket.getDetails() != null) {
+                        for (BorrowTicketDetail detail : ticket.getDetails()) {
+                            BorrowRecord record = new BorrowRecord(
+                                    ticket.getReaderId(),
+                                    detail.getBookId(),
+                                    detail.getQuantity(),
+                                    ticket.getBorrowDate() != null ? ticket.getBorrowDate().toString() : "",
+                                    ticket.getDueDate() != null ? ticket.getDueDate().toString() : "" // 🌟 ĐÃ THÊM: Đấu nối hạn trả sách sang React
+                            );
+                            activeRecords.add(record);
+                        }
+                    }
+                }
+            }
         }
-
-        // 2. Kiểm tra sự tồn tại của Sách trong kho
-        Book book = bookRepository.findById(bookId);
-        if (book == null) {
-            throw new LibraryException("Mã sách '" + bookId + "' không tồn tại trong thư viện!");
-        }
-
-        // 3. Kiểm tra số lượng tồn kho của cuốn sách
-        if (book.getQuantity() < quantity) {
-            throw new LibraryException("Mượn thất bại! Sách '" + book.getTitle()
-                    + "' hiện chỉ còn tồn " + book.getQuantity() + " cuốn (Yêu cầu mượn: " + quantity + ").");
-        }
-
-        // 4. Kiểm tra tổng hạn mức mượn sách hiện tại của Độc giả
-        int currentlyBorrowedCount = countCurrentlyBorrowedBooks(readerId);
-        if (currentlyBorrowedCount + quantity > reader.getMaxBorrowLimit()) {
-            throw new LibraryException(String.format(
-                    "Từ chối cấp phiếu! Độc giả [%s] đang mượn %d cuốn. "
-                            + "Nếu mượn thêm %d cuốn sẽ vượt quá hạn mức tối đa của phân loại %s (%d cuốn).",
-                    reader.getFullName(), currentlyBorrowedCount, quantity, reader.getReaderType(), reader.getMaxBorrowLimit()
-            ));
-        }
-
-        // 5. Đủ điều kiện -> Tiến hành trừ kho sách vật lý
-        book.setQuantity(book.getQuantity() - quantity);
-        bookRepository.update(book);
-
-        // 6. Tự động sinh mã phiếu tăng tiến PTxxx bằng IdGenerator
-        String nextTicketId = IdGenerator.generateTicketId(borrowTicketRepository.getAll());
-
-        // 7. Tạo phiếu mượn mới (Quy định mặc định thời gian mượn tối đa là 14 ngày)
-        LocalDate borrowDate = LocalDate.now();
-        LocalDate dueDate = borrowDate.plusDays(14);
-        BorrowTicket newTicket = new BorrowTicket(nextTicketId, readerId, borrowDate, dueDate);
-
-        // Thêm chi tiết dòng sách đăng ký mượn vào phiếu
-        newTicket.addDetail(new BorrowTicketDetail(bookId, quantity));
-
-        // 8. Lưu phiếu mượn vào cơ sở dữ liệu cứng file tickets.txt
-        borrowTicketRepository.add(newTicket);
-
-        System.out.printf("\n🎉 ĐĂNG KÝ MƯỢN THÀNH CÔNG! Phiếu mượn [%s] đã được tạo.\n", nextTicketId);
-        System.out.printf("   - Độc giả: %s (%s)\n", reader.getFullName(), reader.getReaderType());
-        System.out.printf("   - Sách mượn: %s x %d cuốn\n", book.getTitle(), quantity);
-        System.out.printf("   - Ngày mượn: %s | Hạn hẹn trả sách: %s\n", borrowDate, dueDate);
+        return activeRecords;
     }
 
     /**
-     * NGHIỆP VỤ 2: XỬ LÝ TRẢ SÁCH VÀ TÍNH PHẠT ĐA HÌNH (Strategy Pattern)
+     * NGHIỆP VỤ 1: XỬ LÝ ĐĂNG KÝ MƯỢN SÁCH MỚI (GIỮ NGUYÊN HOÀN TOÀN LOGIC CŨ)
      */
-    public void returnBook(String ticketId) throws LibraryException {
-        // 1. Kiểm tra sự tồn tại của phiếu mượn
-        BorrowTicket ticket = borrowTicketRepository.findById(ticketId);
-        if (ticket == null) {
-            throw new LibraryException("Mã phiếu mượn '" + ticketId + "' không tồn tại trên hệ thống!");
+    public void borrowBook(String readerId, String bookId, int quantity)
+            throws DataNotFoundException, OutOfStockException, BorrowLimitExceededException {
+        if (readerId == null || bookId == null || readerId.trim().isEmpty() || bookId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Lỗi đầu vào: Mã độc giả và mã sách không được để trống!");
         }
 
-        // 2. Kiểm tra xem phiếu này đã xử lý trả trước đó chưa
-        if (ticket.getStatus() == BorrowTicket.TicketStatus.RETURNED) {
-            throw new LibraryException("Phiếu mượn '" + ticketId + "' này đã được hoàn tất trả sách từ trước!");
-        }
-
-        // 3. Tìm thông tin độc giả sở hữu phiếu mượn này để lấy chiến lược phạt
-        Reader reader = readerRepository.findById(ticket.getReaderId());
+        Reader reader = readerRepository.findById(readerId);
         if (reader == null) {
-            throw new LibraryException("Lỗi hệ thống: Không tìm thấy chủ sở hữu của phiếu mượn này!");
+            throw new DataNotFoundException("Không tìm thấy độc giả mang mã '" + readerId + "' trong hệ thống!");
         }
 
-        // 4. Thiết lập ngày trả thực tế là ngày hôm nay
-        LocalDate returnDate = LocalDate.now();
-        ticket.setReturnDate(returnDate);
+        Book book = bookRepository.findById(bookId);
+        if (book == null) {
+            throw new DataNotFoundException("Không tìm thấy đầu sách mang mã '" + bookId + "' trong thư viện!");
+        }
 
-        // 5. Tính toán số ngày trễ hạn thực tế
-        // Hàm ChronoUnit.DAYS.between sẽ tính khoảng cách ngày: (Ngày thực tế - Ngày hẹn trả)
-        int overdueDays = (int) ChronoUnit.DAYS.between(ticket.getDueDate(), returnDate);
+        if (book.getQuantity() < quantity) {
+            throw new OutOfStockException("Sách mang mã '" + bookId + "' đã hết hoặc không đủ số lượng cung cấp trong kho JSON!");
+        }
 
-        // 6. ÁP DỤNG ĐA HÌNH STRATEGY PATTERN: Tự động tính tiền phạt dựa trên phân loại độc giả cụ thể
-        double fineAmount = reader.getFinePolicy().calculateFine(overdueDays);
-        ticket.setFineAmount(fineAmount);
+        int currentBorrowedCount = countCurrentlyBorrowedBooks(readerId);
+        if (currentBorrowedCount + quantity > reader.getMaxBorrowLimit()) {
+            throw new BorrowLimitExceededException("Độc giả '" + reader.getFullName() + "' đã vượt quá hạn mức mượn tối đa (Hiện đang mượn: "
+                    + currentBorrowedCount + " cuốn, hạn mức quy định: " + reader.getMaxBorrowLimit() + " cuốn)!");
+        }
 
-        // 7. Thực hiện hoàn kho số lượng sách vật lý trở lại thư viện
-        for (BorrowTicketDetail detail : ticket.getDetails()) {
-            Book book = bookRepository.findById(detail.getBookId());
-            if (book != null) {
-                book.setQuantity(book.getQuantity() + detail.getQuantity());
-                bookRepository.update(book); // Cập nhật lại kho sách cứng
+        String newTicketId = borrowTicketRepository.generateNextId();
+
+        List<BorrowTicketDetail> details = new ArrayList<>();
+        details.add(new BorrowTicketDetail(bookId, quantity));
+
+        LocalDate borrowDate = LocalDate.now();
+        LocalDate dueDate = borrowDate.plusDays(14); // Mặc định hạn mượn 14 ngày
+
+        BorrowTicket newTicket = new BorrowTicket(
+                newTicketId,
+                readerId.trim().toUpperCase(),
+                borrowDate,
+                dueDate,
+                null,
+                BorrowTicket.TicketStatus.BORROWING,
+                0L,
+                details
+        );
+
+        book.setQuantity(book.getQuantity() - quantity);
+        bookRepository.update(book);
+        borrowTicketRepository.add(newTicket);
+
+        System.out.printf("\n✅ CẤP PHIẾU MƯỢN THÀNH CÔNG! Mã phiếu: %s\n", newTicketId);
+    }
+
+    /**
+     * NGHIỆP VỤ 2: XỬ LÝ NHẬN LẠI SÁCH HOÀN TRẢ VÀ TÍNH PHẠT (GIỮ NGUYÊN LOGIC PHẠT ĐA HÌNH)
+     */
+    public long returnBook(String readerId, String bookId) throws DataNotFoundException {
+        if (readerId == null || bookId == null || readerId.trim().isEmpty() || bookId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Lỗi đầu vào: Mã độc giả và mã sách hoàn trả không được để trống!");
+        }
+
+        String cleanReaderId = readerId.trim().toUpperCase();
+        String cleanBookId = bookId.trim().toUpperCase();
+
+        List<BorrowTicket> allTickets = borrowTicketRepository.getAll();
+        BorrowTicket targetTicket = null;
+
+        for (BorrowTicket ticket : allTickets) {
+            if (ticket.getReaderId().equalsIgnoreCase(cleanReaderId)
+                    && ticket.getStatus() == BorrowTicket.TicketStatus.BORROWING) {
+
+                boolean containsBook = ticket.getDetails().stream()
+                        .anyMatch(detail -> detail.getBookId().equalsIgnoreCase(cleanBookId));
+
+                if (containsBook) {
+                    targetTicket = ticket;
+                    break;
+                }
             }
         }
 
-        // 8. Chuyển đổi trạng thái phiếu mượn sang ĐÃ TRẢ và lưu đè file cứng
-        ticket.setStatus(BorrowTicket.TicketStatus.RETURNED);
-        borrowTicketRepository.update(ticket);
-
-        // 9. In kết quả tổng biên bảm trả sách ra màn hình Console
-        System.out.printf("\n✅ XỬ LÝ TRẢ SÁCH THÀNH CÔNG! Phiếu mượn [%s] đã đóng.\n", ticketId);
-        System.out.println("   - Người trả: " + reader.getFullName());
-        System.out.println("   - Số ngày quá hạn: " + (overdueDays > 0 ? overdueDays + " ngày" : "0 ngày (Đúng hạn)"));
-        if (overdueDays > 0) {
-            System.out.printf("   - Độc giả thuộc diện: %s (Định mức phạt: %,dđ/ngày)\n", reader.getReaderType(), reader.getFinePerDay());
-            System.out.printf("   - 💸 SỐ TIỀN PHẠT THỰC THU: %,.0f VND\n", fineAmount);
-        } else {
-            System.out.println("   - ✨ Độc giả trả đúng hạn quy định, không phát sinh phí phạt.");
+        if (targetTicket == null) {
+            throw new DataNotFoundException("Không tìm thấy phiếu mượn đang hoạt động (Đang mượn) nào của độc giả '"
+                    + readerId + "' cho đầu sách mang mã '" + bookId + "'!");
         }
+
+        Reader reader = readerRepository.findById(cleanReaderId);
+        if (reader == null) {
+            throw new DataNotFoundException("Lỗi hệ thống dữ liệu: Phiếu mượn tồn tại nhưng thông tin độc giả gốc '" + cleanReaderId + "' không tìm thấy!");
+        }
+
+        Book book = bookRepository.findById(cleanBookId);
+        if (book != null) {
+            int borrowedQuantity = targetTicket.getDetails().stream()
+                    .filter(detail -> detail.getBookId().equalsIgnoreCase(cleanBookId))
+                    .mapToInt(BorrowTicketDetail::getQuantity)
+                    .sum();
+
+            book.setQuantity(book.getQuantity() + borrowedQuantity);
+            bookRepository.update(book);
+        }
+
+        LocalDate returnDate = LocalDate.now();
+        targetTicket.setReturnDate(returnDate);
+        targetTicket.setStatus(BorrowTicket.TicketStatus.RETURNED);
+
+        long overdueDays = ChronoUnit.DAYS.between(targetTicket.getDueDate(), returnDate);
+        long fineAmount = 0L;
+
+        if (overdueDays > 0) {
+            fineAmount = (long) reader.getFinePolicy().calculateFine((int) overdueDays);
+            targetTicket.setFinePaid(fineAmount);
+        }
+
+        borrowTicketRepository.update(targetTicket);
+        System.out.printf("\n✅ XỬ XUẤT TRẢ SÁCH THÀNH CÔNG! Phiếu mượn [%s] đã đóng.\n", targetTicket.getTicketId());
+
+        return fineAmount;
     }
 
-    /**
-     * Hàm phụ trợ tính tổng số lượng sách một độc giả đang mượn thực tế trên RAM
-     * (Chỉ tính các phiếu mượn đang có trạng thái nghiệp vụ là BORROWING - Đang mượn).
-     */
     private int countCurrentlyBorrowedBooks(String readerId) {
+        if (readerId == null) return 0;
         int total = 0;
         List<BorrowTicket> allTickets = borrowTicketRepository.getAll();
         for (BorrowTicket t : allTickets) {
-            if (t.getReaderId().equalsIgnoreCase(readerId) && t.getStatus() == BorrowTicket.TicketStatus.BORROWING) {
-                // Duyệt qua tất cả các dòng chi tiết của phiếu đó để cộng dồn số lượng
-                for (BorrowTicketDetail detail : t.getDetails()) {
-                    total += detail.getQuantity();
-                }
+            if (t.getReaderId().equalsIgnoreCase(readerId.trim())
+                    && t.getStatus() == BorrowTicket.TicketStatus.BORROWING) {
+                total += t.getDetails().stream().mapToInt(BorrowTicketDetail::getQuantity).sum();
             }
         }
         return total;

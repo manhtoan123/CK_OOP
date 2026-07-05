@@ -1,0 +1,8 @@
+[ {
+  "userId" : "BD004",
+  "fullName" : "Tran Thanh Dat",
+  "phoneNumber" : "0981027892",
+  "readerType" : "Sinh viên ưu tiên",
+  "maxBorrowLimit" : 5,
+  "finePerDay" : 3000
+} ]
